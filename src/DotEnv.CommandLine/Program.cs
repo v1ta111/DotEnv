@@ -1,22 +1,71 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.CommandLine;
 using System.IO;
-using CommandLine;
+using System.Threading.Tasks;
 
 namespace DotEnv
 {
-  public class Program
+  public static class Program
   {
-    public static int Main(string[] args)
+    public static Task<int> Main(string[] args)
     {
-      return Parser.Default.ParseArguments<Options>(args)
-        .MapResult(Program.Run, _ => 1);
+      var rootCommand = new RootCommand();
+      return rootCommand.InvokeAsync(args);
     }
 
     internal static Dictionary<string, string> Read(string path)
     {
       IEnumerable<KeyValuePair<string, string>> values = DotNetEnv.Env.LoadMulti(new[] { path });
       return new Dictionary<string, string>(values);
+    }
+
+    private static RootCommand Configure(this RootCommand rootCommand)
+    {
+      var verboseOption = new Option<bool>(
+        name: "--verbose",
+        description: "provide verbose output to stderr"
+      );
+      verboseOption.AddAlias("-v");
+      rootCommand.AddGlobalOption(verboseOption);
+
+      var fileOption = new Option<string>(
+        name: "--file",
+        description: "Location of the input .env file. Defaults to .env file in current working directory.",
+        getDefaultValue: () => Path.GetFileName("./.env")
+      );
+      fileOption.AddAlias("--file");
+      rootCommand.AddOption(fileOption);
+
+      var targetOption = new Option<EnvironmentVariableTarget>(
+        name: "--target",
+        description: "Indicates whether the environment variable should be applied to the current process (default), the current user, or the machine. Valid values 'Process', 'Machine', or 'User'."
+      );
+      targetOption.AddAlias("-t");
+      rootCommand.AddOption(targetOption);
+
+      var dryRunOption = new Option<bool>(
+        name: "--dry-run",
+        description: "Loads and parses the .env file, but does not apply environment variable changes."
+      );
+      rootCommand.AddOption(dryRunOption);
+
+      rootCommand.SetHandler((ctx) => {
+          var verbose = ctx.BindingContext.ParseResult.GetValueForOption(verboseOption);
+          var file = ctx.BindingContext.ParseResult.GetValueForOption(fileOption);
+          var target = ctx.BindingContext.ParseResult.GetValueForOption(targetOption);
+          var dryRun = ctx.BindingContext.ParseResult.GetValueForOption(dryRunOption);
+          ctx.ExitCode = Program.Run(new Options
+            {
+              Path = file,
+              Target = target,
+              Verbose = verbose,
+              DryRun = dryRun
+            }
+          );
+      });
+
+      return rootCommand;
     }
 
     private static int Run(Options options)
