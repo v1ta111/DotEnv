@@ -14,3 +14,7 @@ tab_width = 2
 [*.cs]
 indent_size = 2
 tab_width = 2
+
+[*.json]
+indent_size = 2
+tab_width = 2
